@@ -148,15 +148,16 @@ class Mail2PrinterService:
         
         printed_something = False
         
-        # Print email content
-        if self._should_print_content(email_msg):
-            if self._print_email_content(email_msg):
-                printed_something = True
-        
-        # Print attachments
+        # If email has attachments, only print attachments (not email body)
         if self.config.get('processing.print_attachments', True) and email_msg.attachments:
             if self._print_attachments(email_msg):
                 printed_something = True
+                logger.info(f"Printed attachments only for email with attachments from {email_msg.sender}")
+        # If no attachments, print email content
+        elif self._should_print_content(email_msg):
+            if self._print_email_content(email_msg):
+                printed_something = True
+                logger.info(f"Printed email content (no attachments) from {email_msg.sender}")
         
         if printed_something:
             self.stats['emails_printed'] += 1

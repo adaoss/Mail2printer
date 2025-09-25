@@ -3,7 +3,15 @@
 import unittest
 import tempfile
 import os
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
+
+# Mock the problematic modules before importing the config
+sys.modules['PIL'] = MagicMock()
+sys.modules['PIL.Image'] = MagicMock()
+sys.modules['pycups'] = MagicMock()
+sys.modules['weasyprint'] = MagicMock()
 
 from mail2printer.config import Config
 
