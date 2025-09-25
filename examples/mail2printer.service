@@ -1,0 +1,51 @@
+# Systemd service file for Mail2printer
+# Copy to /etc/systemd/system/mail2printer.service
+
+[Unit]
+Description=Mail2printer Email to Printer Service
+After=network-online.target cups.service
+Wants=network-online.target
+Requires=cups.service
+
+[Service]
+Type=simple
+User=mail2printer
+Group=mail2printer
+WorkingDirectory=/opt/mail2printer
+ExecStart=/usr/bin/python3 /opt/mail2printer/main.py --config /etc/mail2printer/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+
+# Environment
+Environment=PYTHONPATH=/opt/mail2printer
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/mail2printer /tmp
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mail2printer
+
+[Install]
+WantedBy=multi-user.target
+
+# Installation Instructions:
+# 1. Create user: sudo useradd -r -s /bin/false mail2printer
+# 2. Create directories:
+#    sudo mkdir -p /opt/mail2printer /etc/mail2printer /var/log/mail2printer
+# 3. Copy files to /opt/mail2printer/
+# 4. Copy config to /etc/mail2printer/config.yaml
+# 5. Set permissions:
+#    sudo chown -R mail2printer:mail2printer /opt/mail2printer /var/log/mail2printer
+#    sudo chmod 600 /etc/mail2printer/config.yaml
+# 6. Copy this file to /etc/systemd/system/mail2printer.service
+# 7. Enable service: sudo systemctl enable mail2printer
+# 8. Start service: sudo systemctl start mail2printer
