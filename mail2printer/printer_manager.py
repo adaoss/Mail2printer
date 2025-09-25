@@ -56,6 +56,7 @@ class PrinterManager:
         self.config = config
         self.cups_connection = None
         self.available_printers = []
+        self._last_image_orientation = None  # Track orientation for image jobs
         
         if HAS_CUPS:
             try:
@@ -299,7 +300,8 @@ class PrinterManager:
             logger.info(f"Converting image to PDF before printing: {file_path}")
             pdf_path = self._image_to_pdf(file_path)
             if pdf_path:
-                result = self._print_file(pdf_path, title, "application/pdf")
+                # Use image-specific print options if orientation was determined
+                result = self._print_file_with_image_options(pdf_path, title, "application/pdf")
                 try:
                     os.unlink(pdf_path)
                 except Exception:
@@ -313,20 +315,175 @@ class PrinterManager:
 
     def _image_to_pdf(self, image_path: Path) -> str or None:
         """
-        Converts an image file to a PDF and returns the path to the PDF.
+        Converts an image file to a PDF with optimal orientation and sizing for A4 paper.
+        
+        Features:
+        - Chooses orientation based on image dimensions (landscape if width > height)
+        - Scales image to fit A4 page with 10mm margins (or no margins if needed)
+        - Centers image on the PDF page
+        - Uses appropriate resolution for printing
         """
         try:
             with Image.open(image_path) as img:
                 # Convert mode if necessary for PDF
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
+                
+                # Get original image dimensions
+                orig_width, orig_height = img.size
+                logger.debug(f"Original image dimensions: {orig_width}x{orig_height}")
+                
+                # Determine optimal orientation based on image aspect ratio
+                image_is_landscape = orig_width > orig_height
+                orientation = "landscape" if image_is_landscape else "portrait"
+                
+                # A4 dimensions in points (1 point = 1/72 inch)
+                # A4 = 210mm x 297mm = 8.27" x 11.69" = 595 x 842 points
+                A4_WIDTH_PT = 595
+                A4_HEIGHT_PT = 842
+                
+                # Set page dimensions based on orientation
+                if orientation == "landscape":
+                    page_width = A4_HEIGHT_PT  # 842
+                    page_height = A4_WIDTH_PT  # 595
+                else:
+                    page_width = A4_WIDTH_PT   # 595
+                    page_height = A4_HEIGHT_PT # 842
+                
+                # Calculate margins in points (10mm = ~28.35 points)
+                margin_pt = 28.35  # 10mm in points
+                
+                # Available space for image (with preferred margins)
+                available_width = page_width - (2 * margin_pt)
+                available_height = page_height - (2 * margin_pt)
+                
+                # Calculate scaling factor to fit image in available space
+                scale_x = available_width / orig_width
+                scale_y = available_height / orig_height
+                scale_factor = min(scale_x, scale_y)
+                
+                # If image doesn't fit with margins, try without margins
+                if scale_factor < 0.1:  # Image is way too big even with margins
+                    logger.debug("Image too large for 10mm margins, using no margins")
+                    available_width = page_width
+                    available_height = page_height
+                    scale_x = available_width / orig_width
+                    scale_y = available_height / orig_height
+                    scale_factor = min(scale_x, scale_y)
+                    margin_pt = 0
+                
+                # Calculate final image dimensions
+                final_width = int(orig_width * scale_factor)
+                final_height = int(orig_height * scale_factor)
+                
+                logger.debug(f"Scaling factor: {scale_factor:.3f}")
+                logger.debug(f"Final image dimensions: {final_width}x{final_height}")
+                logger.debug(f"Using orientation: {orientation}")
+                logger.debug(f"Using margins: {margin_pt:.1f}pt ({margin_pt/28.35:.1f}mm)")
+                
+                # Resize image if necessary
+                if scale_factor != 1.0:
+                    img = img.resize((final_width, final_height), Image.Resampling.LANCZOS)
+                
+                # Create new image with A4 page size and white background
+                page_img = Image.new('RGB', (int(page_width), int(page_height)), 'white')
+                
+                # Calculate position to center the image
+                x_pos = int((page_width - final_width) / 2)
+                y_pos = int((page_height - final_height) / 2)
+                
+                # Paste the resized image onto the page
+                page_img.paste(img, (x_pos, y_pos))
+                
+                # Save as PDF with appropriate DPI
+                # 72 DPI is standard for PDF, higher DPI for better quality
+                dpi = 150  # Good balance between quality and file size
+                
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
-                    img.save(tmp_pdf, "PDF", resolution=100.0)
+                    # Note: PIL doesn't directly support setting page orientation in PDF
+                    # The orientation is handled by the page dimensions we set above
+                    page_img.save(tmp_pdf, "PDF", resolution=dpi)
                     logger.debug(f"Image converted to PDF: {tmp_pdf.name}")
+                    
+                    # Store orientation info for print job options
+                    self._last_image_orientation = orientation
+                    
                     return tmp_pdf.name
+                    
         except Exception as e:
             logger.error(f"Error converting image to PDF: {e}")
             return None
+    
+    def _print_file_with_image_options(self, file_path: str, title: str, content_type: str = None) -> bool:
+        """
+        Print a file with image-specific options (orientation, A4 paper size)
+        
+        Args:
+            file_path: Path to file to print
+            title: Job title
+            content_type: MIME type of file
+            
+        Returns:
+            True if print job submitted successfully
+        """
+        printer_name = self.get_default_printer()
+        if not printer_name:
+            logger.error("No printer available for printing")
+            return False
+        
+        try:
+            # Check page limits
+            max_pages = self.config.get('processing.max_pages_per_document', 50)
+            if max_pages > 0:
+                page_count = self._estimate_page_count(file_path, content_type)
+                if page_count > max_pages:
+                    logger.warning(f"Document exceeds page limit ({page_count} > {max_pages})")
+                    return False
+            
+            # Create image-specific print options
+            image_options = self.default_options.copy()
+            
+            # Force A4 paper size for images
+            image_options['media'] = 'A4'
+            
+            # Use the orientation determined during image conversion
+            if self._last_image_orientation:
+                image_options['orientation-requested'] = self._get_orientation_code(
+                    self._last_image_orientation
+                )
+                logger.debug(f"Using {self._last_image_orientation} orientation for image")
+            
+            # Use CUPS if available
+            if self.cups_connection:
+                job_id = self.cups_connection.printFile(
+                    printer_name,
+                    file_path,
+                    title,
+                    image_options
+                )
+                logger.info(f"Image print job submitted to CUPS: Job ID {job_id}, Printer: {printer_name}, Orientation: {self._last_image_orientation}")
+                return True
+            
+            # Fallback: use lp command
+            cmd = ['lp', '-d', printer_name, '-t', title]
+            
+            # Add options
+            for key, value in image_options.items():
+                cmd.extend(['-o', f'{key}={value}'])
+            
+            cmd.append(file_path)
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.info(f"Image print job submitted using lp: {result.stdout.strip()}, Orientation: {self._last_image_orientation}")
+                return True
+            else:
+                logger.error(f"Print command failed: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error printing image file {file_path}: {e}")
+            return False
             
     
     def _print_file(self, file_path: str, title: str, content_type: str = None) -> bool:
