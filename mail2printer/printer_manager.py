@@ -399,9 +399,12 @@ class PrinterManager:
             Path to generated PDF file or None
         """
         try:
+            # Preprocess HTML to handle CID references that cause wkhtmltopdf errors
+            processed_html = self._preprocess_html_for_pdf(html)
+            
             # Try using wkhtmltopdf
             with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as html_file:
-                html_file.write(html)
+                html_file.write(processed_html)
                 html_path = html_file.name
             
             pdf_path = html_path.replace('.html', '.pdf')
@@ -414,6 +417,8 @@ class PrinterManager:
                 '--margin-bottom', '20mm',
                 '--margin-left', '20mm',
                 '--margin-right', '20mm',
+                '--disable-external-links',  # Prevent CID protocol errors
+                '--load-error-handling', 'ignore',  # Ignore resource loading errors
                 html_path,
                 pdf_path
             ]
@@ -449,6 +454,40 @@ class PrinterManager:
             logger.error(f"Error converting HTML to PDF with WeasyPrint: {e}")
         
         return None
+    
+    def _preprocess_html_for_pdf(self, html: str) -> str:
+        """
+        Preprocess HTML content to handle issues that cause wkhtmltopdf errors
+        
+        Args:
+            html: Original HTML content
+            
+        Returns:
+            Processed HTML content safe for wkhtmltopdf
+        """
+        import re
+        
+        # Replace CID references with placeholder text to prevent protocol errors
+        # Pattern matches: src="cid:..." or href="cid:..." 
+        cid_pattern = r'(?i)(src|href)=["\']cid:[^"\']*["\']'
+        
+        def replace_cid(match):
+            attr = match.group(1).lower()
+            if attr == 'src':
+                # For images, replace with a placeholder or remove the src entirely
+                return 'src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" alt="[Embedded Image]"'
+            else:
+                # For links, just remove the href to make it non-functional
+                return 'href="#" title="[Embedded Content]"'
+        
+        processed_html = re.sub(cid_pattern, replace_cid, html)
+        
+        # Log if we made any replacements
+        if processed_html != html:
+            cid_count = len(re.findall(cid_pattern, html))
+            logger.debug(f"Preprocessed HTML: replaced {cid_count} CID references")
+        
+        return processed_html
     
     def _estimate_page_count(self, file_path: str, content_type: str) -> int:
         """
