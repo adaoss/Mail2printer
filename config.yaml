@@ -1,0 +1,57 @@
+# Mail2printer Configuration File
+# Copy this file and customize for your environment
+
+# Email server configuration
+email:
+  server: "imap.gmail.com"  # IMAP server hostname
+  port: 993                 # IMAP server port
+  use_ssl: true            # Use SSL/TLS connection
+  username: ""             # Email username (REQUIRED)
+  password: ""             # Email password or app password (REQUIRED)
+  inbox_folder: "INBOX"    # Mailbox folder to monitor
+  check_interval: 30       # Check for new emails every N seconds
+  mark_as_read: true       # Mark emails as read after processing
+  delete_after_print: false # Delete emails after printing (USE WITH CAUTION)
+
+# Printer configuration
+printer:
+  name: "default"          # Printer name ("default" uses system default)
+  paper_size: "A4"         # Paper size (A4, Letter, Legal, etc.)
+  orientation: "portrait"  # Page orientation (portrait, landscape)
+  quality: "draft"         # Print quality (draft, normal, high)
+  duplex: false           # Enable duplex (two-sided) printing
+  color: true             # Enable color printing
+
+# Email filtering
+filters:
+  allowed_senders: []      # Only print emails from these addresses (empty = all)
+  blocked_senders: []      # Never print emails from these addresses
+  subject_keywords: []     # Only print emails with these keywords in subject (empty = all)
+  max_attachment_size: 10485760  # Maximum attachment size in bytes (10MB)
+  allowed_attachments:     # Allowed attachment file extensions
+    - ".pdf"
+    - ".txt"
+    - ".doc"
+    - ".docx"
+    - ".jpg"
+    - ".png"
+
+# Processing options
+processing:
+  print_text_emails: true    # Print plain text email content
+  print_html_emails: true    # Print HTML email content
+  print_attachments: true    # Print email attachments
+  convert_html_to_pdf: true  # Convert HTML to PDF before printing
+  max_pages_per_document: 50 # Maximum pages per document (0 = no limit)
+
+# Logging configuration
+logging:
+  level: "INFO"                    # Log level (DEBUG, INFO, WARNING, ERROR)
+  file: "mail2printer.log"         # Log file path
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Security settings
+security:
+  require_authentication: false   # Require sender authentication
+  allowed_domains: []             # Only allow emails from these domains
+  encryption_key: null            # Encryption key for sensitive data

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mail2printer:
+    build: .
+    container_name: mail2printer
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - /tmp:/tmp
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "python", "main.py", "--test-email", "--config", "/app/config/config.yaml"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Usage:
+# 1. Create config directory: mkdir -p config logs
+# 2. Copy your config.yaml to config/config.yaml
+# 3. Run: docker-compose up -d
+# 4. View logs: docker-compose logs -f mail2printer
+# 5. Stop: docker-compose down

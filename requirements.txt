@@ -1,0 +1,3 @@
+PyYAML>=6.0
+pycups>=2.0.1
+weasyprint>=59.0

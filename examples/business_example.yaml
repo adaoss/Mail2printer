@@ -1,0 +1,76 @@
+# Business Environment Configuration Example
+# Suitable for office environments with strict security requirements
+
+email:
+  server: "outlook.office365.com"     # Office 365 IMAP
+  port: 993
+  use_ssl: true
+  username: "printservice@company.com"
+  password: "secure-app-password"
+  inbox_folder: "INBOX"
+  check_interval: 60                  # Check every minute
+  mark_as_read: true
+  delete_after_print: true            # Clean up processed emails
+
+printer:
+  name: "Office-LaserJet-Pro"         # Specific printer name
+  paper_size: "Letter"                # US standard
+  orientation: "portrait"
+  quality: "high"                     # High quality for business documents
+  duplex: true                        # Save paper with duplex printing
+  color: false                        # Black and white for cost savings
+
+filters:
+  # Whitelist approach - only trusted senders
+  allowed_senders:
+    - "accounting@company.com"
+    - "hr@company.com"
+    - "manager@company.com"
+    - "invoices@supplier1.com"
+    - "orders@supplier2.com"
+  
+  # Additional keyword filtering
+  subject_keywords:
+    - "INVOICE"
+    - "PURCHASE ORDER"
+    - "CONTRACT"
+    - "PRINT URGENT"
+    - "DOCUMENT REVIEW"
+  
+  # Restrict file types to business documents
+  allowed_attachments:
+    - ".pdf"
+    - ".doc"
+    - ".docx"
+    - ".xls"
+    - ".xlsx"
+  
+  # Smaller attachment limit for security
+  max_attachment_size: 2097152        # 2MB limit
+
+processing:
+  print_text_emails: true
+  print_html_emails: true
+  print_attachments: true
+  convert_html_to_pdf: true
+  max_pages_per_document: 25          # Reasonable limit for business docs
+
+logging:
+  level: "INFO"
+  file: "/var/log/mail2printer/business.log"
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+
+security:
+  require_authentication: true
+  allowed_domains:
+    - "company.com"
+    - "supplier1.com"
+    - "supplier2.com"
+    - "trustedpartner.com"
+
+# Deployment Notes:
+# - Run as dedicated service user
+# - Set file permissions: chmod 600 config.yaml
+# - Monitor logs regularly for security events
+# - Set up log rotation for /var/log/mail2printer/
+# - Consider firewall rules for email server access

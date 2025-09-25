@@ -1,0 +1,62 @@
+# Gmail Configuration Example
+# Copy this file and customize for your Gmail setup
+
+email:
+  server: "imap.gmail.com"
+  port: 993
+  use_ssl: true
+  username: "your-email@gmail.com"    # Replace with your Gmail address
+  password: "your-app-password"       # Replace with Gmail app password
+  inbox_folder: "INBOX"
+  check_interval: 30
+  mark_as_read: true
+  delete_after_print: false
+
+printer:
+  name: "default"                     # Use system default printer
+  paper_size: "A4"
+  orientation: "portrait"
+  quality: "normal"
+  duplex: false
+  color: true
+
+filters:
+  # Only print emails with "PRINT" in the subject
+  subject_keywords:
+    - "PRINT"
+  
+  # Block spam and marketing emails
+  blocked_senders:
+    - "noreply@"
+    - "marketing@"
+    - "no-reply@"
+  
+  # Limit attachment size to 5MB
+  max_attachment_size: 5242880
+  
+  # Only allow common document types
+  allowed_attachments:
+    - ".pdf"
+    - ".txt"
+    - ".doc"
+    - ".docx"
+    - ".jpg"
+    - ".png"
+
+processing:
+  print_text_emails: true
+  print_html_emails: true
+  print_attachments: true
+  convert_html_to_pdf: true
+  max_pages_per_document: 10         # Limit to prevent large print jobs
+
+logging:
+  level: "INFO"
+  file: "mail2printer.log"
+
+# Setup Instructions:
+# 1. Enable 2-factor authentication in Gmail
+# 2. Go to Google Account settings > Security > App passwords
+# 3. Generate an app password for "Mail"
+# 4. Use the generated password in the 'password' field above
+# 5. Replace 'your-email@gmail.com' with your actual Gmail address
