@@ -188,9 +188,10 @@ class Config:
         if self.get('email.port') <= 0:
             errors.append("Email port must be positive")
         
-        # Validate printer settings
-        if not self.get('printer.name'):
-            errors.append("Printer name is required")
+        # Validate printer settings - only require printer name if it's not 'default'
+        printer_name = self.get('printer.name')
+        if not printer_name or (printer_name.strip() == ''):
+            errors.append("Printer name cannot be empty")
         
         # Log validation errors
         for error in errors:

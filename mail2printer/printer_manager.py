@@ -257,26 +257,7 @@ class PrinterManager:
             logger.error(f"Error printing HTML: {e}")
             return False
     
-    def print_file_old(self, file_path: Path, title: str = None) -> bool:
-        """
-        Print a file
-        
-        Args:
-            file_path: Path to file to print
-            title: Job title (defaults to filename)
-            
-        Returns:
-            True if print job submitted successfully
-        """
-        if not file_path.exists():
-            logger.error(f"File not found: {file_path}")
-            return False
-        
-        title = title or file_path.name
-        content_type, _ = mimetypes.guess_type(str(file_path))
-        
-        return self._print_file(str(file_path), title, content_type)
-    
+
     def print_file(self, file_path: Path, title: str = None) -> bool:
         """
         Print a file
@@ -313,7 +294,7 @@ class PrinterManager:
 
         return self._print_file(str(file_path), title, content_type)
 
-    def _image_to_pdf(self, image_path: Path) -> str or None:
+    def _image_to_pdf(self, image_path: Path) -> Optional[str]:
         """
         Converts an image file to a PDF with optimal orientation and sizing for A4 paper.
         
@@ -625,8 +606,8 @@ class PrinterManager:
         import re
         
         # Replace CID references with placeholder text to prevent protocol errors
-        # Pattern matches: src="cid:..." or href="cid:..." 
-        cid_pattern = r'(?i)(src|href)=["\']cid:[^"\']*["\']'
+        # Pattern matches: src="cid:..." or href="cid:..." (case-insensitive)
+        cid_pattern = r'(?i)(src|href)\s*=\s*["\']cid:[^"\']*["\']'
         
         def replace_cid(match):
             attr = match.group(1).lower()

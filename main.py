@@ -54,6 +54,8 @@ def main():
     # Load configuration
     try:
         config = Config(args.config)
+        if not os.path.exists(args.config):
+            print(f"Warning: Configuration file '{args.config}' not found, using defaults")
     except Exception as e:
         print(f"Error loading configuration: {e}")
         sys.exit(1)
