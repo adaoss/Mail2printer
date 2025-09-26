@@ -295,12 +295,23 @@ class PrinterManager:
         title = title or file_path.name
         content_type, _ = mimetypes.guess_type(str(file_path))
         
-        # NEW: If file is an image, convert to PDF first!
+        # Handle PDFs: Always print as-is in portrait orientation, no processing
+        if content_type == "application/pdf":
+            logger.info(f"Printing PDF as-is in portrait orientation: {file_path}")
+            return self._print_pdf_as_is(str(file_path), title)
+        
+        # Handle Images: Convert to PDF in portrait orientation
         if content_type and content_type.startswith("image/"):
-            logger.info(f"Converting image to PDF before printing: {file_path}")
+            # Only support PNG, JPG, JPEG formats
+            supported_formats = ['image/png', 'image/jpeg', 'image/jpg']
+            if content_type not in supported_formats:
+                logger.error(f"Unsupported image format: {content_type}. Supported formats: PNG, JPG, JPEG")
+                return False
+                
+            logger.info(f"Converting image to PDF in portrait orientation: {file_path}")
             pdf_path = self._image_to_pdf(file_path)
             if pdf_path:
-                # Use image-specific print options if orientation was determined
+                # Use image-specific print options (always portrait)
                 result = self._print_file_with_image_options(pdf_path, title, "application/pdf")
                 try:
                     os.unlink(pdf_path)
@@ -313,12 +324,61 @@ class PrinterManager:
 
         return self._print_file(str(file_path), title, content_type)
 
+    def _print_pdf_as_is(self, file_path: str, title: str) -> bool:
+        """
+        Print a PDF file as-is in portrait orientation without any processing
+        
+        Args:
+            file_path: Path to PDF file to print
+            title: Job title
+            
+        Returns:
+            True if print job submitted successfully
+        """
+        printer_name = self.get_default_printer()
+        if not printer_name:
+            logger.error("No printer available for printing")
+            return False
+
+        try:
+            # Force portrait orientation for PDFs
+            pdf_options = self.default_options.copy()
+            pdf_options['orientation-requested'] = '3'  # Portrait orientation code
+            
+            # Use CUPS if available
+            if self.cups_connection:
+                job_id = self.cups_connection.printFile(
+                    printer_name, file_path, title, pdf_options
+                )
+                logger.info(f"PDF print job {job_id} submitted to printer {printer_name}")
+                return True
+            else:
+                # Fallback to lp command with portrait orientation
+                cmd = [
+                    'lp', '-d', printer_name,
+                    '-t', title,
+                    '-o', 'media=A4',
+                    '-o', 'orientation-requested=3',  # Portrait
+                    file_path
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    logger.info(f"PDF print job submitted via lp command to printer {printer_name}")
+                    return True
+                else:
+                    logger.error(f"lp command failed: {result.stderr}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error printing PDF file {file_path}: {e}")
+            return False
+
     def _image_to_pdf(self, image_path: Path) -> str or None:
         """
-        Converts an image file to a PDF with optimal orientation and sizing for A4 paper.
+        Converts an image file to a PDF in portrait orientation for A4 paper.
         
         Features:
-        - Chooses orientation based on image dimensions (landscape if width > height)
+        - Always uses portrait orientation regardless of image dimensions
         - Scales image to fit A4 page with 10mm margins (or no margins if needed)
         - Centers image on the PDF page
         - Uses appropriate resolution for printing
@@ -333,22 +393,17 @@ class PrinterManager:
                 orig_width, orig_height = img.size
                 logger.debug(f"Original image dimensions: {orig_width}x{orig_height}")
                 
-                # Determine optimal orientation based on image aspect ratio
-                image_is_landscape = orig_width > orig_height
-                orientation = "landscape" if image_is_landscape else "portrait"
+                # Always use portrait orientation as per requirements
+                orientation = "portrait"
                 
                 # A4 dimensions in points (1 point = 1/72 inch)
                 # A4 = 210mm x 297mm = 8.27" x 11.69" = 595 x 842 points
                 A4_WIDTH_PT = 595
                 A4_HEIGHT_PT = 842
                 
-                # Set page dimensions based on orientation
-                if orientation == "landscape":
-                    page_width = A4_HEIGHT_PT  # 842
-                    page_height = A4_WIDTH_PT  # 595
-                else:
-                    page_width = A4_WIDTH_PT   # 595
-                    page_height = A4_HEIGHT_PT # 842
+                # Always use portrait page dimensions
+                page_width = A4_WIDTH_PT   # 595
+                page_height = A4_HEIGHT_PT # 842
                 
                 # Calculate margins in points (10mm = ~28.35 points)
                 margin_pt = 28.35  # 10mm in points
@@ -405,7 +460,7 @@ class PrinterManager:
                     page_img.save(tmp_pdf, "PDF", resolution=dpi)
                     logger.debug(f"Image converted to PDF: {tmp_pdf.name}")
                     
-                    # Store orientation info for print job options
+                    # Store orientation info for print job options (always portrait now)
                     self._last_image_orientation = orientation
                     
                     return tmp_pdf.name
