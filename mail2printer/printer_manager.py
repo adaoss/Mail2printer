@@ -369,14 +369,9 @@ class PrinterManager:
                     logger.info(f"PDF print job submitted via lp command to printer {printer_name}")
                     
                     # Extract job ID and wait for completion
-                    try:
-                        output = result.stdout.strip()
-                        if 'request id is' in output:
-                            job_id_str = output.split('request id is')[1].split()[0]
-                            job_id = int(job_id_str.split('-')[-1])
-                            return self._wait_for_job_completion(job_id)
-                    except Exception as e:
-                        logger.debug(f"Could not extract job ID from lp output: {e}")
+                    job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                    if job_id:
+                        return self._wait_for_job_completion(job_id)
                     
                     return True
                 else:
@@ -549,14 +544,9 @@ class PrinterManager:
                 logger.info(f"Image print job submitted using lp: {result.stdout.strip()}, Orientation: {self._last_image_orientation}")
                 
                 # Extract job ID and wait for completion
-                try:
-                    output = result.stdout.strip()
-                    if 'request id is' in output:
-                        job_id_str = output.split('request id is')[1].split()[0]
-                        job_id = int(job_id_str.split('-')[-1])
-                        return self._wait_for_job_completion(job_id)
-                except Exception as e:
-                    logger.debug(f"Could not extract job ID from lp output: {e}")
+                job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                if job_id:
+                    return self._wait_for_job_completion(job_id)
                 
                 return True
             else:
@@ -620,17 +610,10 @@ class PrinterManager:
             if result.returncode == 0:
                 logger.info(f"Print job submitted using lp: {result.stdout.strip()}")
                 
-                # Extract job ID from lp output if possible and wait for completion
-                # lp output format: "request id is PrinterName-JobID (1 file(s))"
-                try:
-                    output = result.stdout.strip()
-                    if 'request id is' in output:
-                        job_id_str = output.split('request id is')[1].split()[0]
-                        # Extract numeric job ID
-                        job_id = int(job_id_str.split('-')[-1])
-                        return self._wait_for_job_completion(job_id)
-                except Exception as e:
-                    logger.debug(f"Could not extract job ID from lp output: {e}")
+                # Extract job ID from lp output and wait for completion
+                job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                if job_id:
+                    return self._wait_for_job_completion(job_id)
                 
                 return True
             else:
@@ -796,6 +779,25 @@ class PrinterManager:
         
         return 'unknown'
     
+    def _extract_job_id_from_lp_output(self, output: str) -> Optional[int]:
+        """
+        Extract job ID from lp command output
+        
+        Args:
+            output: Output string from lp command
+            
+        Returns:
+            Job ID as integer, or None if not found
+        """
+        try:
+            if 'request id is' in output:
+                job_id_str = output.split('request id is')[1].split()[0]
+                # Extract numeric job ID from format: PrinterName-JobID
+                return int(job_id_str.split('-')[-1])
+        except Exception as e:
+            logger.debug(f"Could not extract job ID from lp output: {e}")
+        return None
+    
     def _wait_for_job_completion(self, job_id: int) -> bool:
         """
         Wait for print job to complete
@@ -889,8 +891,6 @@ class PrinterManager:
             
             # Wait before next check
             time.sleep(check_interval)
-        
-        return True
     
     def cancel_job(self, job_id: int) -> bool:
         """

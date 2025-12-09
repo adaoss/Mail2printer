@@ -150,9 +150,15 @@ processing:
     @patch('time.time')
     def test_wait_for_job_completion_timeout(self, mock_time, mock_sleep):
         """Test that job completion wait returns False on timeout"""
-        # Mock time progression to exceed timeout
-        # Need more values for all time.time() calls including in logging
-        mock_time.side_effect = [0, 5, 11, 11, 11, 11, 11, 11]  # Exceed 10s timeout
+        # Mock time progression to exceed timeout using a counter
+        time_counter = [0]  # Use list to allow mutation in nested function
+        
+        def mock_time_func():
+            value = time_counter[0]
+            time_counter[0] += 6  # Advance by 6 seconds each call
+            return value
+        
+        mock_time.side_effect = mock_time_func
         
         # Mock CUPS connection with a job that never completes
         mock_cups = MagicMock()
