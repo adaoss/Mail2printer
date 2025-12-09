@@ -32,7 +32,10 @@ class Config:
             'orientation': 'portrait',
             'quality': 'draft',
             'duplex': False,
-            'color': True
+            'color': True,
+            'job_timeout': 300,  # Maximum seconds to wait for job completion (0 = no timeout)
+            'wait_for_completion': True,  # Wait for job to complete before returning
+            'completion_check_interval': 2  # Seconds between job status checks
         },
         'filters': {
             'allowed_senders': [],
