@@ -151,7 +151,8 @@ processing:
     def test_wait_for_job_completion_timeout(self, mock_time, mock_sleep):
         """Test that job completion wait returns False on timeout"""
         # Mock time progression to exceed timeout
-        mock_time.side_effect = [0, 5, 11]  # Exceed 10s timeout
+        # Need more values for all time.time() calls including in logging
+        mock_time.side_effect = [0, 5, 11, 11, 11, 11, 11, 11]  # Exceed 10s timeout
         
         # Mock CUPS connection with a job that never completes
         mock_cups = MagicMock()
