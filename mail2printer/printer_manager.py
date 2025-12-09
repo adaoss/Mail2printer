@@ -7,6 +7,7 @@ import subprocess
 import logging
 import tempfile
 import shutil
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import mimetypes
@@ -351,7 +352,9 @@ class PrinterManager:
                     printer_name, file_path, title, pdf_options
                 )
                 logger.info(f"PDF print job {job_id} submitted to printer {printer_name}")
-                return True
+                
+                # Wait for job completion to prevent blocking issues (e.g., HP SmartTank 555)
+                return self._wait_for_job_completion(job_id)
             else:
                 # Fallback to lp command with portrait orientation
                 cmd = [
@@ -364,6 +367,12 @@ class PrinterManager:
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode == 0:
                     logger.info(f"PDF print job submitted via lp command to printer {printer_name}")
+                    
+                    # Extract job ID and wait for completion
+                    job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                    if job_id:
+                        return self._wait_for_job_completion(job_id)
+                    
                     return True
                 else:
                     logger.error(f"lp command failed: {result.stderr}")
@@ -517,7 +526,9 @@ class PrinterManager:
                     image_options
                 )
                 logger.info(f"Image print job submitted to CUPS: Job ID {job_id}, Printer: {printer_name}, Orientation: {self._last_image_orientation}")
-                return True
+                
+                # Wait for job completion to prevent blocking issues (e.g., HP SmartTank 555)
+                return self._wait_for_job_completion(job_id)
             
             # Fallback: use lp command
             cmd = ['lp', '-d', printer_name, '-t', title]
@@ -531,6 +542,12 @@ class PrinterManager:
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 logger.info(f"Image print job submitted using lp: {result.stdout.strip()}, Orientation: {self._last_image_orientation}")
+                
+                # Extract job ID and wait for completion
+                job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                if job_id:
+                    return self._wait_for_job_completion(job_id)
+                
                 return True
             else:
                 logger.error(f"Print command failed: {result.stderr}")
@@ -576,7 +593,9 @@ class PrinterManager:
                     self.default_options
                 )
                 logger.info(f"Print job submitted to CUPS: Job ID {job_id}, Printer: {printer_name}")
-                return True
+                
+                # Wait for job completion to prevent blocking issues (e.g., HP SmartTank 555)
+                return self._wait_for_job_completion(job_id)
             
             # Fallback: use lp command
             cmd = ['lp', '-d', printer_name, '-t', title]
@@ -590,6 +609,12 @@ class PrinterManager:
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 logger.info(f"Print job submitted using lp: {result.stdout.strip()}")
+                
+                # Extract job ID from lp output and wait for completion
+                job_id = self._extract_job_id_from_lp_output(result.stdout.strip())
+                if job_id:
+                    return self._wait_for_job_completion(job_id)
+                
                 return True
             else:
                 logger.error(f"Print command failed: {result.stderr}")
@@ -753,6 +778,119 @@ class PrinterManager:
                 logger.error(f"Error getting job status: {e}")
         
         return 'unknown'
+    
+    def _extract_job_id_from_lp_output(self, output: str) -> Optional[int]:
+        """
+        Extract job ID from lp command output
+        
+        Args:
+            output: Output string from lp command
+            
+        Returns:
+            Job ID as integer, or None if not found
+        """
+        try:
+            if 'request id is' in output:
+                job_id_str = output.split('request id is')[1].split()[0]
+                # Extract numeric job ID from format: PrinterName-JobID
+                return int(job_id_str.split('-')[-1])
+        except Exception as e:
+            logger.debug(f"Could not extract job ID from lp output: {e}")
+        return None
+    
+    def _wait_for_job_completion(self, job_id: int) -> bool:
+        """
+        Wait for print job to complete
+        
+        This method helps prevent blocking issues with HP printers like SmartTank 555
+        by ensuring the job completes before returning control.
+        
+        Args:
+            job_id: Print job ID to monitor
+            
+        Returns:
+            True if job completed successfully, False if timed out or failed
+        """
+        if not self.config.get('printer.wait_for_completion', True):
+            # If not configured to wait, return immediately
+            return True
+        
+        job_timeout = self.config.get('printer.job_timeout', 300)
+        check_interval = self.config.get('printer.completion_check_interval', 2)
+        
+        if job_timeout <= 0:
+            # No timeout, don't wait
+            return True
+        
+        start_time = time.time()
+        last_status = None
+        
+        logger.debug(f"Waiting for job {job_id} to complete (timeout: {job_timeout}s)")
+        
+        while True:
+            elapsed = time.time() - start_time
+            
+            # Check if we've exceeded timeout
+            if elapsed > job_timeout:
+                logger.warning(f"Job {job_id} timeout after {elapsed:.1f}s")
+                return False
+            
+            try:
+                if self.cups_connection:
+                    # Get job status from CUPS
+                    jobs = self.cups_connection.getJobs(which_jobs='all')
+                    
+                    if job_id not in jobs:
+                        # Job no longer in queue - it completed
+                        logger.info(f"Job {job_id} completed successfully in {elapsed:.1f}s")
+                        return True
+                    
+                    job_info = jobs[job_id]
+                    status = job_info.get('job-state', 'unknown')
+                    
+                    # Log status changes
+                    if status != last_status:
+                        logger.debug(f"Job {job_id} status: {status}")
+                        last_status = status
+                    
+                    # Check for completion states
+                    # CUPS job-state values: 3=pending, 4=held, 5=processing, 6=stopped, 7=canceled, 8=aborted, 9=completed
+                    if status in [7, 8]:  # canceled or aborted
+                        logger.error(f"Job {job_id} failed with status: {status}")
+                        return False
+                    elif status == 9:  # completed
+                        logger.info(f"Job {job_id} completed successfully in {elapsed:.1f}s")
+                        return True
+                else:
+                    # Without CUPS connection, use lpstat
+                    result = subprocess.run(
+                        ['lpstat', '-W', 'completed', '-o', str(job_id)],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if result.returncode == 0 and 'completed' in result.stdout.lower():
+                        logger.info(f"Job {job_id} completed successfully in {elapsed:.1f}s")
+                        return True
+                    
+                    # Check if job is still in queue
+                    result = subprocess.run(
+                        ['lpstat', '-o', str(job_id)],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if result.returncode != 0 or not result.stdout:
+                        # Job no longer in queue
+                        logger.info(f"Job {job_id} completed in {elapsed:.1f}s")
+                        return True
+                
+            except Exception as e:
+                logger.warning(f"Error checking job {job_id} status: {e}")
+                # On error, assume job is progressing
+            
+            # Wait before next check
+            time.sleep(check_interval)
     
     def cancel_job(self, job_id: int) -> bool:
         """

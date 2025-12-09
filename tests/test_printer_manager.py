@@ -116,6 +116,115 @@ processing:
         # Should have appropriate placeholders
         self.assertEqual(processed_html.count('[Embedded Image]'), 4)  # 4 images
         self.assertEqual(processed_html.count('[Embedded Content]'), 2)  # 2 links
+    
+    @patch('time.sleep')
+    @patch('time.time')
+    def test_wait_for_job_completion_success(self, mock_time, mock_sleep):
+        """Test that job completion wait returns True when job completes"""
+        # Mock time progression
+        mock_time.side_effect = [0, 1, 2, 3]  # Simulate time passing
+        
+        # Mock CUPS connection with a job that completes
+        mock_cups = MagicMock()
+        self.printer_manager.cups_connection = mock_cups
+        
+        # First call: job in queue, second call: job completed (not in queue)
+        mock_cups.getJobs.side_effect = [
+            {123: {'job-state': 5}},  # processing
+            {}  # completed (no longer in queue)
+        ]
+        
+        # Enable waiting
+        self.config.set('printer.wait_for_completion', True)
+        self.config.set('printer.job_timeout', 10)
+        
+        result = self.printer_manager._wait_for_job_completion(123)
+        
+        # Should succeed
+        self.assertTrue(result)
+        
+        # Should have checked job status
+        self.assertEqual(mock_cups.getJobs.call_count, 2)
+    
+    @patch('time.sleep')
+    @patch('time.time')
+    def test_wait_for_job_completion_timeout(self, mock_time, mock_sleep):
+        """Test that job completion wait returns False on timeout"""
+        # Mock time progression to exceed timeout using a counter
+        time_counter = [0]  # Use list to allow mutation in nested function
+        
+        def mock_time_func():
+            value = time_counter[0]
+            time_counter[0] += 6  # Advance by 6 seconds each call
+            return value
+        
+        mock_time.side_effect = mock_time_func
+        
+        # Mock CUPS connection with a job that never completes
+        mock_cups = MagicMock()
+        self.printer_manager.cups_connection = mock_cups
+        mock_cups.getJobs.return_value = {123: {'job-state': 5}}  # Always processing
+        
+        # Enable waiting with short timeout
+        self.config.set('printer.wait_for_completion', True)
+        self.config.set('printer.job_timeout', 10)
+        
+        result = self.printer_manager._wait_for_job_completion(123)
+        
+        # Should timeout and return False
+        self.assertFalse(result)
+    
+    def test_wait_for_job_completion_disabled(self):
+        """Test that job completion wait returns immediately when disabled"""
+        # Disable waiting
+        self.config.set('printer.wait_for_completion', False)
+        
+        result = self.printer_manager._wait_for_job_completion(123)
+        
+        # Should return True immediately without checking status
+        self.assertTrue(result)
+    
+    @patch('time.sleep')
+    @patch('time.time')
+    def test_wait_for_job_completion_job_failed(self, mock_time, mock_sleep):
+        """Test that job completion wait detects failed jobs"""
+        # Mock time progression
+        mock_time.side_effect = [0, 1, 2]
+        
+        # Mock CUPS connection with a job that fails
+        mock_cups = MagicMock()
+        self.printer_manager.cups_connection = mock_cups
+        mock_cups.getJobs.return_value = {123: {'job-state': 8}}  # aborted
+        
+        # Enable waiting
+        self.config.set('printer.wait_for_completion', True)
+        self.config.set('printer.job_timeout', 10)
+        
+        result = self.printer_manager._wait_for_job_completion(123)
+        
+        # Should detect failure and return False
+        self.assertFalse(result)
+    
+    @patch('subprocess.run')
+    def test_print_file_waits_for_completion_with_cups(self, mock_run):
+        """Test that _print_file waits for job completion when using CUPS"""
+        # Mock CUPS connection
+        mock_cups = MagicMock()
+        mock_cups.printFile.return_value = 456  # Job ID
+        self.printer_manager.cups_connection = mock_cups
+        
+        # Mock job completion wait
+        with patch.object(self.printer_manager, '_wait_for_job_completion', return_value=True) as mock_wait:
+            with patch.object(self.printer_manager, 'get_default_printer', return_value='test_printer'):
+                with patch.object(self.printer_manager, '_estimate_page_count', return_value=1):
+                    
+                    result = self.printer_manager._print_file('/tmp/test.txt', 'Test', 'text/plain')
+                    
+                    # Should succeed
+                    self.assertTrue(result)
+                    
+                    # Should have waited for completion
+                    mock_wait.assert_called_once_with(456)
 
 
 if __name__ == '__main__':

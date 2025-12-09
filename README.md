@@ -94,6 +94,7 @@ filters:
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Usage Guide](docs/USAGE.md)** - Configuration and operation
+- **[HP Printer Fix](docs/HP_PRINTER_FIX.md)** - Fix for HP SmartTank 555 blocking issues
 - **[Examples](examples/)** - Ready-to-use configuration files
 
 ## Requirements
@@ -123,6 +124,23 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Troubleshooting
+
+### HP Printers (SmartTank 555, etc.)
+
+If you experience blocking or hanging at the end of page printing:
+- See **[HP Printer Fix Documentation](docs/HP_PRINTER_FIX.md)** for detailed solution
+- Ensure `wait_for_completion: true` is set in your configuration
+- Adjust `job_timeout` if needed (default: 300 seconds)
+
+### Other Issues
+
+For general troubleshooting:
+- Check printer connection: `python main.py --config my_config.yaml --test-printer`
+- Check email connection: `python main.py --config my_config.yaml --test-email`
+- Review logs in `mail2printer.log`
+- Verify CUPS status: `lpstat -t`
 
 ## Support
 

@@ -21,6 +21,9 @@ printer:
   quality: "draft"         # Print quality (draft, normal, high)
   duplex: false           # Enable duplex (two-sided) printing
   color: true             # Enable color printing
+  job_timeout: 300        # Maximum seconds to wait for job completion (0 = no timeout)
+  wait_for_completion: true  # Wait for job to complete before returning (prevents blocking)
+  completion_check_interval: 2  # Seconds between job status checks
 
 # Email filtering
 filters:
