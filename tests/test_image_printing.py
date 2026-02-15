@@ -269,7 +269,8 @@ processing:
         mock_path.exists.return_value = True
         mock_path.name = 'test.txt'
         
-        with patch.object(self.printer_manager, '_print_file', return_value=True) as mock_print:
+        # Return tuple (job_id, success) instead of just bool
+        with patch.object(self.printer_manager, '_print_file', return_value=(123, True)) as mock_print:
             
             result = self.printer_manager.print_file(mock_path)
             
