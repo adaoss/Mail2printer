@@ -9,23 +9,34 @@ A Python service that automatically prints incoming emails and their attachments
 - **Content Types**: Handles plain text and HTML emails
 - **Attachment Support**: Prints PDF, Word documents, images, and more
 - **Smart Filtering**: Filter by sender, subject keywords, and file types
+- **Duplicate Prevention**: Prevents the same email from being printed multiple times
 
 ### 🖨️ Printing Capabilities  
 - **CUPS Integration**: Native support for Linux/macOS printing
 - **Multiple Formats**: Text, HTML-to-PDF conversion, and direct file printing
 - **Print Options**: Paper size, quality, duplex, color settings
 - **Page Limits**: Prevent excessive printing with configurable limits
+- **Job Management**: Track and cancel print jobs
+
+### 🌐 REST API
+- **Laravel Integration**: Ready-to-use REST API for Laravel applications
+- **Status Monitoring**: Get real-time service and printer status
+- **Job Control**: List, monitor, and cancel print jobs remotely
+- **Statistics**: Access service statistics and uptime
+- **Secure Authentication**: Optional API key authentication
 
 ### 🔒 Security & Filtering
 - **Sender Whitelist/Blacklist**: Control who can trigger printing
 - **Domain Filtering**: Restrict to specific email domains
 - **File Type Validation**: Only print approved attachment types
 - **Size Limits**: Prevent large file processing
+- **API Security**: Optional API key protection for remote access
 
 ### 📊 Monitoring & Logging
 - **Comprehensive Logging**: Track all email processing and print jobs
 - **Statistics**: Monitor service performance and success rates
 - **Health Checks**: Built-in connection testing for email and printer
+- **REST API**: Monitor and control the service remotely
 
 ## Quick Start
 
@@ -94,6 +105,7 @@ filters:
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
 - **[Usage Guide](docs/USAGE.md)** - Configuration and operation
+- **[API Documentation](docs/API.md)** - REST API reference for Laravel integration
 - **[Examples](examples/)** - Ready-to-use configuration files
 
 ## Requirements
@@ -107,6 +119,27 @@ filters:
 - PyYAML - Configuration file handling
 - pycups - CUPS integration (optional but recommended)
 - weasyprint - HTML to PDF conversion (optional)
+- Flask - REST API server (optional, for API features)
+
+## API Usage
+
+Mail2printer includes a REST API for integration with Laravel or other applications. Enable the API in your configuration:
+
+```yaml
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 5000
+  key: "your-secret-key"
+```
+
+Then access endpoints like:
+- `GET /api/status` - Get service status
+- `GET /api/printer/status` - Get printer status
+- `GET /api/printer/jobs` - List print jobs
+- `POST /api/printer/jobs/{id}/cancel` - Cancel a job
+
+See **[API Documentation](docs/API.md)** for complete API reference and Laravel integration examples.
 
 ## Security Considerations
 
@@ -115,6 +148,8 @@ filters:
 - Set appropriate file permissions (600) on config files
 - Monitor logs for unauthorized access attempts
 - Consider running as dedicated service user
+- **Use API key authentication** when enabling the REST API
+- **Use HTTPS/reverse proxy** when exposing API over network
 
 ## Contributing
 

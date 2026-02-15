@@ -44,6 +44,14 @@ processing:
   convert_html_to_pdf: true  # Convert HTML to PDF before printing
   max_pages_per_document: 50 # Maximum pages per document (0 = no limit)
 
+# REST API configuration
+api:
+  enabled: true                # Enable/disable REST API
+  host: "0.0.0.0"             # API server host (0.0.0.0 = all interfaces)
+  port: 5000                   # API server port
+  key: ""                      # API key for authentication (leave empty to disable auth)
+  debug: false                 # Enable debug mode
+
 # Logging configuration
 logging:
   level: "INFO"                    # Log level (DEBUG, INFO, WARNING, ERROR)

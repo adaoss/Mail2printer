@@ -10,6 +10,7 @@ import sys
 import os
 import logging
 import argparse
+import threading
 from pathlib import Path
 
 # Add current directory to Python path for imports
@@ -36,6 +37,35 @@ def setup_logging(config):
         ]
     )
 
+def start_api_server(service, config):
+    """Start the REST API server in a separate thread"""
+    from mail2printer import api
+    
+    # Set the service instance for API access
+    api.set_service(service)
+    
+    # Set API key if configured
+    api_key = config.get('api.key')
+    if api_key:
+        api.set_api_key(api_key)
+        logging.info("API key authentication enabled")
+    else:
+        logging.warning("API key not configured - API will be open to all requests")
+    
+    # Get API configuration
+    api_host = config.get('api.host', '0.0.0.0')
+    api_port = config.get('api.port', 5000)
+    api_debug = config.get('api.debug', False)
+    
+    # Start API server in separate thread
+    api_thread = threading.Thread(
+        target=api.run_api_server,
+        args=(api_host, api_port, api_debug),
+        daemon=True
+    )
+    api_thread.start()
+    logging.info(f"API server started on {api_host}:{api_port}")
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Mail2printer - Email to Printer Service')
@@ -47,6 +77,10 @@ def main():
                        help='Test printer connection and exit')
     parser.add_argument('--test-email', action='store_true',
                        help='Test email connection and exit')
+    parser.add_argument('--api-only', action='store_true',
+                       help='Run only the API server (no email processing)')
+    parser.add_argument('--no-api', action='store_true',
+                       help='Disable the API server')
     parser.add_argument('--version', action='version', version='Mail2printer 1.0.0')
     
     args = parser.parse_args()
@@ -86,7 +120,24 @@ def main():
     # Start the service
     try:
         service = Mail2PrinterService(config)
-        service.run(daemon=args.daemon)
+        
+        # Start API server if enabled
+        if not args.no_api and config.get('api.enabled', True):
+            start_api_server(service, config)
+        
+        # Run main service unless API-only mode
+        if not args.api_only:
+            service.run(daemon=args.daemon)
+        else:
+            # API-only mode: just keep the main thread alive
+            logger.info("Running in API-only mode")
+            import time
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Shutting down...")
+                
     except KeyboardInterrupt:
         logger.info("Received interrupt signal, shutting down...")
     except Exception as e:
