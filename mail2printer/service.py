@@ -253,8 +253,9 @@ Date: {email_msg.date}
         
         # Save attachments to temporary directory
         import tempfile
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
+        temp_dir_obj = tempfile.TemporaryDirectory()
+        try:
+            temp_path = Path(temp_dir_obj.name)
             saved_files = email_msg.save_attachments(temp_path)
             
             for file_path in saved_files:
@@ -270,6 +271,16 @@ Date: {email_msg.date}
                 except Exception as e:
                     logger.error(f"Error printing attachment {file_path.name}: {e}")
                     self.stats['print_jobs_failed'] += 1
+            
+            # Wait for print jobs to complete before cleanup
+            # Give extra time for multiple attachments
+            wait_time = min(5 + (printed_count * 2), 30)
+            logger.debug(f"Waiting {wait_time}s for {printed_count} attachment(s) to spool")
+            time.sleep(wait_time)
+            
+        finally:
+            # Clean up temporary directory
+            temp_dir_obj.cleanup()
         
         return printed_count > 0
     
