@@ -32,6 +32,10 @@ JOB_STATE_CANCELED = 7
 JOB_STATE_ABORTED = 8
 JOB_STATE_COMPLETED = 9
 
+# Wait time constants for print job spooling
+DEFAULT_SPOOL_WAIT_TIME = 2  # Default wait time in seconds for print spooling
+IMAGE_SPOOL_WAIT_TIME = 2  # Wait time for image print jobs
+
 class PrintJob:
     """Represents a print job"""
     
@@ -231,7 +235,7 @@ class PrinterManager:
                 self.wait_for_job_completion(job_id, timeout=10)
             else:
                 # Even without job ID, wait briefly for file to be read
-                time.sleep(2)
+                time.sleep(DEFAULT_SPOOL_WAIT_TIME)
             
             # Clean up
             try:
@@ -268,7 +272,7 @@ class PrinterManager:
                         self.wait_for_job_completion(job_id, timeout=10)
                     else:
                         # Wait briefly for file to be read
-                        time.sleep(2)
+                        time.sleep(DEFAULT_SPOOL_WAIT_TIME)
                     
                     try:
                         os.unlink(pdf_path)
@@ -287,7 +291,7 @@ class PrinterManager:
                 if success and job_id:
                     self.wait_for_job_completion(job_id, timeout=10)
                 else:
-                    time.sleep(2)
+                    time.sleep(DEFAULT_SPOOL_WAIT_TIME)
                 
                 try:
                     os.unlink(temp_path)
@@ -359,7 +363,7 @@ class PrinterManager:
                 
                 # Wait briefly for print spooling before cleanup
                 if result:
-                    time.sleep(2)
+                    time.sleep(DEFAULT_SPOOL_WAIT_TIME)
                 
                 try:
                     os.unlink(pdf_path)

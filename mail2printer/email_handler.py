@@ -303,10 +303,13 @@ class EmailHandler:
             
             # Limit size of processed message IDs cache (keep last 1000)
             if len(self._processed_message_ids) > 1000:
-                # Keep only the most recent 500 message IDs
-                # Note: Since sets are unordered, we convert to a list to slice
-                # This is a simple cleanup to prevent unbounded memory growth
-                # In practice, message IDs are chronological in processing order
+                # Keep only 500 message IDs to prevent unbounded memory growth
+                # Note: Sets are unordered in Python, so slicing the list doesn't
+                # guarantee keeping the "most recent" IDs. However, this simple
+                # approach is sufficient for preventing memory issues.
+                # For production systems with high email volume, consider using
+                # a collections.deque(maxlen=1000) or timestamp-based tracking
+                # to ensure true LRU (Least Recently Used) behavior.
                 recent_ids = list(self._processed_message_ids)[-500:]
                 self._processed_message_ids = set(recent_ids)
             

@@ -258,9 +258,9 @@ Date: {email_msg.date}
         
         # Save attachments to temporary directory
         import tempfile
-        temp_dir_obj = tempfile.TemporaryDirectory()
+        temp_dir = tempfile.TemporaryDirectory()
         try:
-            temp_path = Path(temp_dir_obj.name)
+            temp_path = Path(temp_dir.name)
             saved_files = email_msg.save_attachments(temp_path)
             
             for file_path in saved_files:
@@ -285,7 +285,7 @@ Date: {email_msg.date}
             
         finally:
             # Clean up temporary directory
-            temp_dir_obj.cleanup()
+            temp_dir.cleanup()
         
         return printed_count > 0
     
