@@ -425,13 +425,51 @@ python main.py --config config.yaml --no-api
 python main.py --config config.yaml --api-only
 ```
 
+### Production Deployment
+
+**Important:** The built-in Flask development server (`app.run()`) is not suitable for production use. For production deployments, use a proper WSGI server:
+
+#### Option 1: Gunicorn (Recommended for Linux/macOS)
+```bash
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 'mail2printer.api:app'
+```
+
+#### Option 2: uWSGI
+```bash
+pip install uwsgi
+uwsgi --http :5000 --wsgi-file mail2printer/api.py --callable app
+```
+
+#### Option 3: Behind Nginx (Recommended)
+Configure nginx as a reverse proxy:
+```nginx
+server {
+    listen 80;
+    server_name mail2printer.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Then run with Gunicorn:
+```bash
+gunicorn -w 4 -b 127.0.0.1:5000 'mail2printer.api:app'
+```
+
 ## Security Recommendations
 
 1. **Always use an API key** in production environments
 2. **Use HTTPS** when exposing the API over a network (use a reverse proxy like nginx)
-3. **Firewall rules** - restrict API access to trusted networks/IPs
-4. **Monitor logs** for unauthorized access attempts
-5. **Rotate API keys** regularly
+3. **Use a production WSGI server** (Gunicorn, uWSGI) - never use Flask's built-in server in production
+4. **Firewall rules** - restrict API access to trusted networks/IPs
+5. **Monitor logs** for unauthorized access attempts
+6. **Rotate API keys** regularly
 
 ## Troubleshooting
 

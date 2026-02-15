@@ -23,6 +23,15 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# CUPS job state constants
+JOB_STATE_PENDING = 3
+JOB_STATE_HELD = 4
+JOB_STATE_PROCESSING = 5
+JOB_STATE_STOPPED = 6
+JOB_STATE_CANCELED = 7
+JOB_STATE_ABORTED = 8
+JOB_STATE_COMPLETED = 9
+
 class PrintJob:
     """Represents a print job"""
     
@@ -853,7 +862,7 @@ class PrinterManager:
                 
                 # Check job state
                 job_state = jobs[job_id].get('job-state')
-                if job_state in [7, 8, 9]:  # Completed, Stopped, or Canceled
+                if job_state in [JOB_STATE_CANCELED, JOB_STATE_ABORTED, JOB_STATE_COMPLETED]:
                     logger.debug(f"Print job {job_id} finished with state {job_state}")
                     return True
                 

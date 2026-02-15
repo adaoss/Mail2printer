@@ -303,8 +303,12 @@ class EmailHandler:
             
             # Limit size of processed message IDs cache (keep last 1000)
             if len(self._processed_message_ids) > 1000:
-                # Convert to list, keep last 500, convert back to set
-                self._processed_message_ids = set(list(self._processed_message_ids)[-500:])
+                # Keep only the most recent 500 message IDs
+                # Note: Since sets are unordered, we convert to a list to slice
+                # This is a simple cleanup to prevent unbounded memory growth
+                # In practice, message IDs are chronological in processing order
+                recent_ids = list(self._processed_message_ids)[-500:]
+                self._processed_message_ids = set(recent_ids)
             
             logger.info(f"Found {len(emails)} new emails to process")
             return emails

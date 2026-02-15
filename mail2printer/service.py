@@ -16,6 +16,11 @@ from .printer_manager import PrinterManager
 
 logger = logging.getLogger(__name__)
 
+# Constants for attachment print job waiting
+BASE_WAIT_TIME = 5  # Base wait time in seconds
+WAIT_PER_ATTACHMENT = 2  # Additional seconds per attachment
+MAX_WAIT_TIME = 30  # Maximum wait time in seconds
+
 class Mail2PrinterService:
     """Main Mail2printer service"""
     
@@ -274,7 +279,7 @@ Date: {email_msg.date}
             
             # Wait for print jobs to complete before cleanup
             # Give extra time for multiple attachments
-            wait_time = min(5 + (printed_count * 2), 30)
+            wait_time = min(BASE_WAIT_TIME + (printed_count * WAIT_PER_ATTACHMENT), MAX_WAIT_TIME)
             logger.debug(f"Waiting {wait_time}s for {printed_count} attachment(s) to spool")
             time.sleep(wait_time)
             
