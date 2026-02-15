@@ -7,6 +7,7 @@ import subprocess
 import logging
 import tempfile
 import shutil
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import mimetypes
@@ -21,6 +22,19 @@ except ImportError:
     logging.warning("pycups not available, using system commands for printing")
 
 logger = logging.getLogger(__name__)
+
+# CUPS job state constants
+JOB_STATE_PENDING = 3
+JOB_STATE_HELD = 4
+JOB_STATE_PROCESSING = 5
+JOB_STATE_STOPPED = 6
+JOB_STATE_CANCELED = 7
+JOB_STATE_ABORTED = 8
+JOB_STATE_COMPLETED = 9
+
+# Wait time constants for print job spooling
+DEFAULT_SPOOL_WAIT_TIME = 2  # Default wait time in seconds for print spooling
+IMAGE_SPOOL_WAIT_TIME = 2  # Wait time for image print jobs
 
 class PrintJob:
     """Represents a print job"""
@@ -57,6 +71,7 @@ class PrinterManager:
         self.cups_connection = None
         self.available_printers = []
         self._last_image_orientation = None  # Track orientation for image jobs
+        self._active_jobs = {}  # Track active print jobs
         
         if HAS_CUPS:
             try:
@@ -213,10 +228,20 @@ class PrinterManager:
                 temp_path = temp_file.name
             
             # Print the file
-            success = self._print_file(temp_path, title, 'text/plain')
+            job_id, success = self._print_file(temp_path, title, 'text/plain')
+            
+            if success and job_id:
+                # Wait for job to be spooled before cleanup
+                self.wait_for_job_completion(job_id, timeout=10)
+            else:
+                # Even without job ID, wait briefly for file to be read
+                time.sleep(DEFAULT_SPOOL_WAIT_TIME)
             
             # Clean up
-            os.unlink(temp_path)
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete temp file {temp_path}: {e}")
             
             return success
             
@@ -240,8 +265,20 @@ class PrinterManager:
                 # Convert HTML to PDF first
                 pdf_path = self._html_to_pdf(html, title)
                 if pdf_path:
-                    success = self._print_file(pdf_path, title, 'application/pdf')
-                    os.unlink(pdf_path)
+                    job_id, success = self._print_file(pdf_path, title, 'application/pdf')
+                    
+                    if success and job_id:
+                        # Wait for job to be spooled before cleanup
+                        self.wait_for_job_completion(job_id, timeout=10)
+                    else:
+                        # Wait briefly for file to be read
+                        time.sleep(DEFAULT_SPOOL_WAIT_TIME)
+                    
+                    try:
+                        os.unlink(pdf_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temp file {pdf_path}: {e}")
+                    
                     return success
             else:
                 # Print HTML directly
@@ -249,8 +286,18 @@ class PrinterManager:
                     temp_file.write(html)
                     temp_path = temp_file.name
                 
-                success = self._print_file(temp_path, title, 'text/html')
-                os.unlink(temp_path)
+                job_id, success = self._print_file(temp_path, title, 'text/html')
+                
+                if success and job_id:
+                    self.wait_for_job_completion(job_id, timeout=10)
+                else:
+                    time.sleep(DEFAULT_SPOOL_WAIT_TIME)
+                
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {temp_path}: {e}")
+                
                 return success
                 
         except Exception as e:
@@ -313,16 +360,23 @@ class PrinterManager:
             if pdf_path:
                 # Use image-specific print options (always portrait)
                 result = self._print_file_with_image_options(pdf_path, title, "application/pdf")
+                
+                # Wait briefly for print spooling before cleanup
+                if result:
+                    time.sleep(DEFAULT_SPOOL_WAIT_TIME)
+                
                 try:
                     os.unlink(pdf_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {pdf_path}: {e}")
+                
                 return result
             else:
                 logger.error(f"Failed to convert image {file_path} to PDF.")
                 return False
 
-        return self._print_file(str(file_path), title, content_type)
+        job_id, success = self._print_file(str(file_path), title, content_type)
+        return success
 
     def _print_pdf_as_is(self, file_path: str, title: str) -> bool:
         """
@@ -541,7 +595,7 @@ class PrinterManager:
             return False
             
     
-    def _print_file(self, file_path: str, title: str, content_type: str = None) -> bool:
+    def _print_file(self, file_path: str, title: str, content_type: str = None) -> tuple:
         """
         Internal method to print a file
         
@@ -551,12 +605,12 @@ class PrinterManager:
             content_type: MIME type of file
             
         Returns:
-            True if print job submitted successfully
+            Tuple of (job_id, success) where job_id is the print job ID (or None) and success is bool
         """
         printer_name = self.get_default_printer()
         if not printer_name:
             logger.error("No printer available for printing")
-            return False
+            return None, False
         
         try:
             # Check page limits
@@ -565,7 +619,7 @@ class PrinterManager:
                 page_count = self._estimate_page_count(file_path, content_type)
                 if page_count > max_pages:
                     logger.warning(f"Document exceeds page limit ({page_count} > {max_pages})")
-                    return False
+                    return None, False
             
             # Use CUPS if available
             if self.cups_connection:
@@ -576,7 +630,8 @@ class PrinterManager:
                     self.default_options
                 )
                 logger.info(f"Print job submitted to CUPS: Job ID {job_id}, Printer: {printer_name}")
-                return True
+                self._active_jobs[job_id] = {'title': title, 'file_path': file_path, 'time': time.time()}
+                return job_id, True
             
             # Fallback: use lp command
             cmd = ['lp', '-d', printer_name, '-t', title]
@@ -590,14 +645,24 @@ class PrinterManager:
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 logger.info(f"Print job submitted using lp: {result.stdout.strip()}")
-                return True
+                # Try to extract job ID from lp output (format: "request id is PrinterName-jobid")
+                try:
+                    output = result.stdout.strip()
+                    if 'request id is' in output:
+                        job_id_str = output.split('request id is')[1].strip().split('-')[-1]
+                        job_id = int(job_id_str)
+                        self._active_jobs[job_id] = {'title': title, 'file_path': file_path, 'time': time.time()}
+                        return job_id, True
+                except Exception:
+                    pass
+                return None, True
             else:
                 logger.error(f"Print command failed: {result.stderr}")
-                return False
+                return None, False
                 
         except Exception as e:
             logger.error(f"Error printing file {file_path}: {e}")
-            return False
+            return None, False
     
     def _html_to_pdf(self, html: str, title: str) -> Optional[str]:
         """
@@ -773,3 +838,85 @@ class PrinterManager:
                 logger.error(f"Error cancelling job {job_id}: {e}")
         
         return False
+    
+    def wait_for_job_completion(self, job_id: int, timeout: int = 30) -> bool:
+        """
+        Wait for print job to complete
+        
+        Args:
+            job_id: Print job ID
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            True if job completed successfully
+        """
+        if not self.cups_connection:
+            # Without CUPS, wait a fixed time for print spooling
+            time.sleep(min(timeout, 5))
+            return True
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                jobs = self.cups_connection.getJobs()
+                if job_id not in jobs:
+                    # Job completed (no longer in queue)
+                    logger.debug(f"Print job {job_id} completed")
+                    return True
+                
+                # Check job state
+                job_state = jobs[job_id].get('job-state')
+                if job_state in [JOB_STATE_CANCELED, JOB_STATE_ABORTED, JOB_STATE_COMPLETED]:
+                    logger.debug(f"Print job {job_id} finished with state {job_state}")
+                    return True
+                
+                # Job still processing, wait a bit
+                time.sleep(0.5)
+                
+            except Exception as e:
+                logger.warning(f"Error checking job {job_id} status: {e}")
+                break
+        
+        logger.warning(f"Print job {job_id} did not complete within {timeout}s")
+        return False
+    
+    def get_all_jobs(self) -> Dict[int, Dict[str, Any]]:
+        """
+        Get all print jobs
+        
+        Returns:
+            Dictionary of job IDs to job information
+        """
+        if self.cups_connection:
+            try:
+                return self.cups_connection.getJobs()
+            except Exception as e:
+                logger.error(f"Error getting jobs: {e}")
+        
+        return {}
+    
+    def get_printer_stats(self) -> Dict[str, Any]:
+        """
+        Get printer statistics
+        
+        Returns:
+            Dictionary with printer statistics
+        """
+        stats = {
+            'printer_name': self.get_default_printer(),
+            'available_printers': self.get_available_printers(),
+            'active_jobs': len(self._active_jobs),
+            'cups_available': HAS_CUPS and self.cups_connection is not None
+        }
+        
+        if self.cups_connection:
+            try:
+                jobs = self.cups_connection.getJobs()
+                stats['queued_jobs'] = len(jobs)
+                stats['job_ids'] = list(jobs.keys())
+            except Exception as e:
+                logger.error(f"Error getting printer stats: {e}")
+                stats['queued_jobs'] = 0
+                stats['job_ids'] = []
+        
+        return stats

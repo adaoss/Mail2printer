@@ -162,6 +162,7 @@ class EmailHandler:
         self.config = config
         self.imap_connection = None
         self.last_check_time = 0
+        self._processed_message_ids = set()  # Track processed emails to prevent duplicates
         
     def connect(self) -> bool:
         """
@@ -262,24 +263,55 @@ class EmailHandler:
                     raw_email = email.message_from_bytes(msg_data[0][1])
                     email_message = EmailMessage(raw_email)
                     
+                    # Check if already processed (prevent duplicates)
+                    if email_message.message_id in self._processed_message_ids:
+                        logger.debug(f"Skipping already processed email: {email_message.message_id}")
+                        continue
+                    
                     # Apply filters
                     if self._should_process_email(email_message):
-                        emails.append(email_message)
-                        
-                        # Mark as read if configured
+                        # Mark as read IMMEDIATELY to prevent reprocessing if service crashes
                         if self.config.get('email.mark_as_read'):
-                            self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                            try:
+                                self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                            except Exception as e:
+                                logger.warning(f"Failed to mark email as read: {e}")
                         
-                        # Delete if configured
+                        # Mark for deletion if configured (but don't expunge yet)
                         if self.config.get('email.delete_after_print'):
-                            self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
+                            try:
+                                self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
+                            except Exception as e:
+                                logger.warning(f"Failed to mark email for deletion: {e}")
+                        
+                        # Add to processed set
+                        self._processed_message_ids.add(email_message.message_id)
+                        
+                        # Add to processing queue
+                        emails.append(email_message)
+                        logger.debug(f"Queued email for processing: {email_message.subject}")
                     
                 except Exception as e:
                     logger.error(f"Error processing email {msg_id}: {e}")
             
             # Expunge deleted messages
             if self.config.get('email.delete_after_print'):
-                self.imap_connection.expunge()
+                try:
+                    self.imap_connection.expunge()
+                except Exception as e:
+                    logger.warning(f"Failed to expunge deleted messages: {e}")
+            
+            # Limit size of processed message IDs cache (keep last 1000)
+            if len(self._processed_message_ids) > 1000:
+                # Keep only 500 message IDs to prevent unbounded memory growth
+                # Note: Sets are unordered in Python, so slicing the list doesn't
+                # guarantee keeping the "most recent" IDs. However, this simple
+                # approach is sufficient for preventing memory issues.
+                # For production systems with high email volume, consider using
+                # a collections.deque(maxlen=1000) or timestamp-based tracking
+                # to ensure true LRU (Least Recently Used) behavior.
+                recent_ids = list(self._processed_message_ids)[-500:]
+                self._processed_message_ids = set(recent_ids)
             
             logger.info(f"Found {len(emails)} new emails to process")
             return emails

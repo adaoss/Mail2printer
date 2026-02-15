@@ -16,6 +16,11 @@ from .printer_manager import PrinterManager
 
 logger = logging.getLogger(__name__)
 
+# Constants for attachment print job waiting
+BASE_WAIT_TIME = 5  # Base wait time in seconds
+WAIT_PER_ATTACHMENT = 2  # Additional seconds per attachment
+MAX_WAIT_TIME = 30  # Maximum wait time in seconds
+
 class Mail2PrinterService:
     """Main Mail2printer service"""
     
@@ -253,8 +258,9 @@ Date: {email_msg.date}
         
         # Save attachments to temporary directory
         import tempfile
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
+        temp_dir = tempfile.TemporaryDirectory()
+        try:
+            temp_path = Path(temp_dir.name)
             saved_files = email_msg.save_attachments(temp_path)
             
             for file_path in saved_files:
@@ -270,6 +276,16 @@ Date: {email_msg.date}
                 except Exception as e:
                     logger.error(f"Error printing attachment {file_path.name}: {e}")
                     self.stats['print_jobs_failed'] += 1
+            
+            # Wait for print jobs to complete before cleanup
+            # Give extra time for multiple attachments
+            wait_time = min(BASE_WAIT_TIME + (printed_count * WAIT_PER_ATTACHMENT), MAX_WAIT_TIME)
+            logger.debug(f"Waiting {wait_time}s for {printed_count} attachment(s) to spool")
+            time.sleep(wait_time)
+            
+        finally:
+            # Clean up temporary directory
+            temp_dir.cleanup()
         
         return printed_count > 0
     
