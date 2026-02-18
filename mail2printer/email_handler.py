@@ -20,14 +20,16 @@ logger = logging.getLogger(__name__)
 class EmailMessage:
     """Represents an email message with all its components"""
     
-    def __init__(self, raw_message: email.message.EmailMessage):
+    def __init__(self, raw_message: email.message.EmailMessage, max_attachment_size: int = 10485760):
         """
         Initialize email message
         
         Args:
             raw_message: Raw email message from imaplib
+            max_attachment_size: Maximum attachment size in bytes
         """
         self.raw_message = raw_message
+        self.max_attachment_size = max_attachment_size
         self.subject = self._decode_header(raw_message.get('Subject', ''))
         self.sender = self._decode_header(raw_message.get('From', ''))
         self.recipient = self._decode_header(raw_message.get('To', ''))
@@ -107,14 +109,21 @@ class EmailMessage:
         try:
             payload = part.get_payload(decode=True)
             if payload:
+                # Check attachment size before storing in memory
+                attachment_size = len(payload)
+                
+                if attachment_size > self.max_attachment_size:
+                    logger.warning(f"Attachment {filename} too large ({attachment_size} bytes), skipping")
+                    return
+                    
                 attachment = {
                     'filename': filename,
                     'content_type': content_type,
-                    'size': len(payload),
+                    'size': attachment_size,
                     'data': payload
                 }
                 self.attachments.append(attachment)
-                logger.debug(f"Found attachment: {filename} ({content_type}, {len(payload)} bytes)")
+                logger.debug(f"Found attachment: {filename} ({content_type}, {attachment_size} bytes)")
         except Exception as e:
             logger.warning(f"Error processing attachment {filename}: {e}")
     
@@ -227,6 +236,7 @@ class EmailHandler:
             if not self.connect():
                 return []
         
+        emails = []
         try:
             inbox_folder = self.config.get('email.inbox_folder', 'INBOX')
             self.imap_connection.select(inbox_folder)
@@ -249,9 +259,8 @@ class EmailHandler:
             
             if status != 'OK':
                 logger.warning(f"Email search failed: {status}")
-                return []
+                return emails
             
-            emails = []
             for msg_id in message_ids[0].split():
                 try:
                     # Fetch email
@@ -261,7 +270,8 @@ class EmailHandler:
                     
                     # Parse email
                     raw_email = email.message_from_bytes(msg_data[0][1])
-                    email_message = EmailMessage(raw_email)
+                    max_attachment_size = self.config.get('filters.max_attachment_size', 10485760)
+                    email_message = EmailMessage(raw_email, max_attachment_size)
                     
                     # Check if already processed (prevent duplicates)
                     if email_message.message_id in self._processed_message_ids:
@@ -314,11 +324,13 @@ class EmailHandler:
                 self._processed_message_ids = set(recent_ids)
             
             logger.info(f"Found {len(emails)} new emails to process")
-            return emails
             
         except Exception as e:
             logger.error(f"Error checking emails: {e}")
-            return []
+            # On serious errors, disconnect to force reconnection next time
+            self.disconnect()
+            
+        return emails
     
     def _should_process_email(self, email_message: EmailMessage) -> bool:
         """

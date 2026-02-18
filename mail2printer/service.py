@@ -339,17 +339,25 @@ Date: {email_msg.date}
             sys.stdout.flush()
             sys.stderr.flush()
             
-            with open('/dev/null', 'r') as si:
-                os.dup2(si.fileno(), sys.stdin.fileno())
-            with open('/dev/null', 'w') as so:
-                os.dup2(so.fileno(), sys.stdout.fileno())
-            with open('/dev/null', 'w') as se:
-                os.dup2(se.fileno(), sys.stderr.fileno())
+            # Use safer file opening with explicit error handling
+            try:
+                with open('/dev/null', 'r') as si:
+                    os.dup2(si.fileno(), sys.stdin.fileno())
+                with open('/dev/null', 'w') as so:
+                    os.dup2(so.fileno(), sys.stdout.fileno())
+                with open('/dev/null', 'w') as se:
+                    os.dup2(se.fileno(), sys.stderr.fileno())
+            except OSError as e:
+                logger.error(f"Failed to redirect file descriptors: {e}")
+                raise
             
             logger.info("Service daemonized successfully")
             
         except AttributeError:
             logger.warning("Daemonization not supported on this platform")
+        except OSError as e:
+            logger.error(f"Fork failed during daemonization: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to daemonize: {e}")
             raise
