@@ -99,6 +99,25 @@ class TestConfig(unittest.TestCase):
         if other_path.exists():
             os.unlink(other_path)
 
+    def test_invalid_top_level_yaml_config_raises(self):
+        """Test non-mapping YAML configs are rejected"""
+        self.config_path.write_text("- invalid\n- config\n")
+
+        with self.assertRaises(ValueError):
+            Config(str(self.config_path))
+
+    def test_invalid_top_level_json_config_raises(self):
+        """Test non-mapping JSON configs are rejected"""
+        json_path = Path(self.temp_dir) / "test_config.json"
+        json_path.write_text('["invalid", "config"]')
+
+        try:
+            with self.assertRaises(ValueError):
+                Config(str(json_path))
+        finally:
+            if json_path.exists():
+                os.unlink(json_path)
+
 
 if __name__ == '__main__':
     unittest.main()
