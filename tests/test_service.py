@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
+from email.message import EmailMessage as RawEmailMessage
 
 # Mock the problematic modules before importing the service
 sys.modules['PIL'] = MagicMock()
@@ -145,6 +146,22 @@ processing:
         self.service._print_attachments.assert_not_called()
         self.service._print_email_content.assert_called_once_with(email_msg)
         self.assertEqual(self.service.stats['emails_printed'], 1)
+
+    def test_attachment_saving_strips_unsafe_paths_and_renames_duplicates(self):
+        """Test attachment saving keeps files inside target directory"""
+        raw_message = RawEmailMessage()
+        email_msg = EmailMessage(raw_message)
+        email_msg.attachments = [
+            {'filename': '../secret.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'a'},
+            {'filename': '..\\secret.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'b'},
+            {'filename': '...', 'content_type': 'text/plain', 'size': 1, 'data': b'c'},
+        ]
+
+        saved_files = email_msg.save_attachments(Path(self.temp_dir))
+
+        self.assertEqual([path.name for path in saved_files], ['secret.txt', 'secret_1.txt', 'attachment'])
+        for path in saved_files:
+            self.assertEqual(path.parent, Path(self.temp_dir))
 
 
 if __name__ == '__main__':

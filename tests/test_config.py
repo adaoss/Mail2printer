@@ -75,6 +75,30 @@ class TestConfig(unittest.TestCase):
         config2 = Config(str(self.config_path))
         self.assertEqual(config.get('email.server'), config2.get('email.server'))
 
+    def test_empty_config_file_uses_defaults(self):
+        """Test empty config files fall back to defaults"""
+        self.config_path.write_text("")
+
+        config = Config(str(self.config_path))
+
+        self.assertEqual(config.get('email.server'), 'imap.gmail.com')
+
+    def test_default_config_isolated_per_instance(self):
+        """Test one config instance cannot mutate future defaults"""
+        first = Config(str(self.config_path))
+        first.set('filters.allowed_attachments', ['.csv'])
+
+        other_path = Path(self.temp_dir) / "other_config.yaml"
+        second = Config(str(other_path))
+
+        self.assertEqual(
+            second.get('filters.allowed_attachments'),
+            ['.pdf', '.txt', '.doc', '.docx', '.jpg', '.png']
+        )
+
+        if other_path.exists():
+            os.unlink(other_path)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -133,9 +133,10 @@ class EmailMessage:
         
         for attachment in self.attachments:
             try:
-                filename = attachment['filename']
-                # Sanitize filename
-                filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+                filename = self._sanitize_attachment_filename(
+                    attachment['filename'],
+                    {path.name for path in saved_files}
+                )
                 
                 file_path = directory / filename
                 with open(file_path, 'wb') as f:
@@ -148,6 +149,25 @@ class EmailMessage:
                 logger.error(f"Error saving attachment {attachment['filename']}: {e}")
         
         return saved_files
+
+    def _sanitize_attachment_filename(self, filename: str, existing_names: set[str]) -> str:
+        """Sanitize attachment filename and keep it inside the target directory."""
+        normalized = Path(filename.replace('\\', '/')).name
+        sanitized = re.sub(r'[<>:"/\\|?*]', '_', normalized).strip().strip('.')
+
+        if not sanitized:
+            sanitized = "attachment"
+
+        suffix = ''.join(Path(sanitized).suffixes)
+        stem = sanitized[:-len(suffix)] if suffix else sanitized
+        candidate = sanitized
+        counter = 1
+
+        while candidate in existing_names:
+            candidate = f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        return candidate
 
 class EmailHandler:
     """Handles email operations for Mail2printer service"""

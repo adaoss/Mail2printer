@@ -338,6 +338,18 @@ processing:
                         
                         # Should succeed for supported formats
                         self.assertTrue(result)
+
+    @patch('mimetypes.guess_type')
+    def test_print_file_rejects_images_without_pillow(self, mock_guess_type):
+        """Test image printing fails gracefully when Pillow is unavailable"""
+        mock_guess_type.return_value = ('image/jpeg', None)
+
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.name = 'test.jpg'
+
+        with patch('mail2printer.printer_manager.Image', None):
+            self.assertFalse(self.printer_manager.print_file(mock_path))
     
     def test_print_pdf_as_is_with_cups(self):
         """Test printing PDF as-is using CUPS"""

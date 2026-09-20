@@ -2,6 +2,7 @@
 Configuration management for Mail2printer service
 """
 
+import copy
 import os
 import yaml
 import json
@@ -68,7 +69,7 @@ class Config:
             config_path: Path to configuration file
         """
         self.config_path = Path(config_path)
-        self.data = self.DEFAULT_CONFIG.copy()
+        self.data = copy.deepcopy(self.DEFAULT_CONFIG)
         self.load()
     
     def load(self):
@@ -84,6 +85,11 @@ class Config:
                     loaded_config = json.load(f)
                 else:
                     loaded_config = yaml.safe_load(f)
+
+            if loaded_config is None:
+                loaded_config = {}
+            elif not isinstance(loaded_config, dict):
+                raise ValueError("Configuration file must contain a JSON/YAML object at the top level")
             
             # Merge with defaults (recursive merge)
             self.data = self._merge_configs(self.DEFAULT_CONFIG, loaded_config)
@@ -159,7 +165,7 @@ class Config:
         Returns:
             Merged configuration
         """
-        result = default.copy()
+        result = copy.deepcopy(default)
         
         for key, value in loaded.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):

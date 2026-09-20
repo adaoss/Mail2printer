@@ -11,7 +11,12 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import mimetypes
-from PIL import Image
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+    logging.warning("Pillow not available, image printing is disabled")
 
 # Try to import pycups for CUPS integration
 try:
@@ -349,6 +354,10 @@ class PrinterManager:
         
         # Handle Images: Convert to PDF in portrait orientation
         if content_type and content_type.startswith("image/"):
+            if Image is None:
+                logger.error("Cannot print image attachment because Pillow is not installed")
+                return False
+
             # Only support PNG, JPG, JPEG formats
             supported_formats = ['image/png', 'image/jpeg', 'image/jpg']
             if content_type not in supported_formats:
@@ -438,6 +447,10 @@ class PrinterManager:
         - Uses appropriate resolution for printing
         """
         try:
+            if Image is None:
+                logger.error("Cannot convert image to PDF because Pillow is not installed")
+                return None
+
             with Image.open(image_path) as img:
                 # Convert mode if necessary for PDF
                 if img.mode in ("RGBA", "P"):
@@ -492,7 +505,8 @@ class PrinterManager:
                 
                 # Resize image if necessary
                 if scale_factor != 1.0:
-                    img = img.resize((final_width, final_height), Image.Resampling.LANCZOS)
+                    resampling = getattr(getattr(Image, 'Resampling', Image), 'LANCZOS', getattr(Image, 'LANCZOS', 1))
+                    img = img.resize((final_width, final_height), resampling)
                 
                 # Create new image with A4 page size and white background
                 page_img = Image.new('RGB', (int(page_width), int(page_height)), 'white')
