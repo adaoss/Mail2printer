@@ -164,6 +164,24 @@ processing:
             self.assertEqual(path.parent, Path(self.temp_dir))
             path.unlink()
 
+    def test_attachment_saving_avoids_existing_files(self):
+        """Test attachment saving does not overwrite existing files"""
+        existing_file = Path(self.temp_dir) / "report.pdf"
+        existing_file.write_bytes(b"original")
+
+        raw_message = RawEmailMessage()
+        email_msg = EmailMessage(raw_message)
+        email_msg.attachments = [
+            {'filename': 'report.pdf', 'content_type': 'application/pdf', 'size': 1, 'data': b'new'},
+        ]
+
+        saved_files = email_msg.save_attachments(Path(self.temp_dir))
+
+        self.assertEqual(saved_files[0].name, 'report_1.pdf')
+        self.assertEqual(existing_file.read_bytes(), b"original")
+        saved_files[0].unlink()
+        existing_file.unlink()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -130,7 +130,7 @@ class EmailMessage:
         """
         saved_files = []
         directory.mkdir(parents=True, exist_ok=True)
-        reserved_names = set()
+        reserved_names = {path.name for path in directory.iterdir() if path.is_file()}
         
         for attachment in self.attachments:
             try:
