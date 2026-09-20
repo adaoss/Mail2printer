@@ -17,6 +17,12 @@ import mimetypes
 
 logger = logging.getLogger(__name__)
 
+WINDOWS_RESERVED_FILENAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+}
+
 class EmailMessage:
     """Represents an email message with all its components"""
     
@@ -158,8 +164,15 @@ class EmailMessage:
             sanitized = "attachment"
 
         suffix = ''.join(Path(sanitized).suffixes)
-        stem = sanitized[:-len(suffix)] if suffix else sanitized
+        original_stem = sanitized[:-len(suffix)] if suffix else sanitized
+        stem = original_stem
+
+        if stem.upper() in WINDOWS_RESERVED_FILENAMES:
+            stem = f"{stem}_file"
+
         candidate = sanitized
+        if stem != original_stem:
+            candidate = f"{stem}{suffix}"
         counter = 1
 
         while candidate in existing_names:

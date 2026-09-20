@@ -182,6 +182,19 @@ processing:
         saved_files[0].unlink()
         existing_file.unlink()
 
+    def test_attachment_saving_rewrites_windows_reserved_names(self):
+        """Test attachment saving rewrites reserved device names"""
+        raw_message = RawEmailMessage()
+        email_msg = EmailMessage(raw_message)
+        email_msg.attachments = [
+            {'filename': 'CON.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'data'},
+        ]
+
+        saved_files = email_msg.save_attachments(Path(self.temp_dir))
+
+        self.assertEqual(saved_files[0].name, 'CON_file.txt')
+        saved_files[0].unlink()
+
 
 if __name__ == '__main__':
     unittest.main()
