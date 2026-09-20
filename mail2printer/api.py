@@ -12,6 +12,7 @@ Provides endpoints for Laravel app to:
 import logging
 import os
 import signal
+import hmac
 from typing import Optional
 from functools import wraps
 from flask import Flask, jsonify, request, Response
@@ -50,7 +51,7 @@ def require_api_key(f):
         # Check for API key in header or query parameter
         provided_key = request.headers.get('X-API-Key') or request.args.get('api_key')
         
-        if not provided_key or provided_key != _api_key:
+        if not provided_key or not hmac.compare_digest(provided_key, _api_key):
             return jsonify({
                 'error': 'Unauthorized',
                 'message': 'Valid API key required'

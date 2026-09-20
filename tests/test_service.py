@@ -162,6 +162,7 @@ processing:
         self.assertEqual([path.name for path in saved_files], ['secret.txt', 'secret_1.txt', 'attachment'])
         for path in saved_files:
             self.assertEqual(path.parent, Path(self.temp_dir))
+            path.unlink()
 
 
 if __name__ == '__main__':
