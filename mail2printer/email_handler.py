@@ -170,9 +170,7 @@ class EmailMessage:
         if stem.upper() in WINDOWS_RESERVED_FILENAMES:
             stem = f"{stem}_file"
 
-        candidate = sanitized
-        if stem != original_stem:
-            candidate = f"{stem}{suffix}"
+        candidate = f"{stem}{suffix}"
         counter = 1
 
         while candidate.lower() in existing_names:
