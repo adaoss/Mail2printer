@@ -154,12 +154,16 @@ processing:
         email_msg.attachments = [
             {'filename': '../secret.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'a'},
             {'filename': '..\\secret.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'b'},
+            {'filename': 'C:\\temp\\secret.txt', 'content_type': 'text/plain', 'size': 1, 'data': b'c'},
             {'filename': '...', 'content_type': 'text/plain', 'size': 1, 'data': b'c'},
         ]
 
         saved_files = email_msg.save_attachments(Path(self.temp_dir))
 
-        self.assertEqual([path.name for path in saved_files], ['secret.txt', 'secret_1.txt', 'attachment'])
+        self.assertEqual(
+            [path.name for path in saved_files],
+            ['secret.txt', 'secret_1.txt', 'secret_2.txt', 'attachment']
+        )
         for path in saved_files:
             self.assertEqual(path.parent, Path(self.temp_dir))
             path.unlink()
