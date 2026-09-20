@@ -44,14 +44,15 @@ def require_api_key(f):
     """Decorator to require API key authentication"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not _api_key:
+        configured_key = _api_key
+        if not isinstance(configured_key, str) or not configured_key:
             # API key not configured, allow all requests
             return f(*args, **kwargs)
         
         # Check for API key in header or query parameter
         provided_key = request.headers.get('X-API-Key') or request.args.get('api_key')
         
-        if not provided_key or not hmac.compare_digest(provided_key, _api_key):
+        if not provided_key or not hmac.compare_digest(provided_key, configured_key):
             return jsonify({
                 'error': 'Unauthorized',
                 'message': 'Valid API key required'
