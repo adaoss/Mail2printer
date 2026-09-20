@@ -130,13 +130,12 @@ class EmailMessage:
         """
         saved_files = []
         directory.mkdir(parents=True, exist_ok=True)
+        reserved_names = set()
         
         for attachment in self.attachments:
             try:
-                filename = self._sanitize_attachment_filename(
-                    attachment['filename'],
-                    {path.name for path in saved_files}
-                )
+                filename = self._sanitize_attachment_filename(attachment['filename'], reserved_names)
+                reserved_names.add(filename)
                 
                 file_path = directory / filename
                 with open(file_path, 'wb') as f:
