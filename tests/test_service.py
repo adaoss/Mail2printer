@@ -166,7 +166,7 @@ processing:
 
     def test_attachment_saving_avoids_existing_files(self):
         """Test attachment saving does not overwrite existing files"""
-        existing_file = Path(self.temp_dir) / "report.pdf"
+        existing_file = Path(self.temp_dir) / "Report.pdf"
         existing_file.write_bytes(b"original")
 
         raw_message = RawEmailMessage()

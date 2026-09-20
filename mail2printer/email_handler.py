@@ -136,12 +136,12 @@ class EmailMessage:
         """
         saved_files = []
         directory.mkdir(parents=True, exist_ok=True)
-        reserved_names = {path.name for path in directory.iterdir() if path.is_file()}
+        reserved_names = set()
         
         for attachment in self.attachments:
             try:
-                filename = self._sanitize_attachment_filename(attachment['filename'], reserved_names)
-                reserved_names.add(filename)
+                filename = self._sanitize_attachment_filename(attachment['filename'], directory, reserved_names)
+                reserved_names.add(filename.lower())
                 
                 file_path = directory / filename
                 with open(file_path, 'wb') as f:
@@ -155,7 +155,7 @@ class EmailMessage:
         
         return saved_files
 
-    def _sanitize_attachment_filename(self, filename: str, existing_names: set[str]) -> str:
+    def _sanitize_attachment_filename(self, filename: str, directory: Path, existing_names: set[str]) -> str:
         """Sanitize attachment filename and keep it inside the target directory."""
         normalized = Path(filename.replace('\\', '/')).name
         sanitized = re.sub(r'[<>:"/\\|?*]', '_', normalized).strip().strip('.')
@@ -175,11 +175,20 @@ class EmailMessage:
             candidate = f"{stem}{suffix}"
         counter = 1
 
-        while candidate in existing_names:
+        while candidate.lower() in existing_names or self._path_exists_case_insensitive(directory, candidate):
             candidate = f"{stem}_{counter}{suffix}"
             counter += 1
 
         return candidate
+
+    def _path_exists_case_insensitive(self, directory: Path, candidate: str) -> bool:
+        """Check whether a filename already exists, including on case-insensitive filesystems."""
+        candidate_path = directory / candidate
+        if candidate_path.exists():
+            return True
+
+        candidate_lower = candidate.lower()
+        return any(path.name.lower() == candidate_lower for path in directory.iterdir())
 
 class EmailHandler:
     """Handles email operations for Mail2printer service"""
